@@ -1,0 +1,13 @@
+apiVersion: vendir.k14s.io/v1alpha1
+directories:
+- contents:
+  - imgpkgBundle:
+      image: projects.registry.vmware.com/buildservice/kpack/bundle@sha256:c521ab952b8b8dcfc3c305b089b0be2b422b62d7101a9f6f741eba582bdeffc4
+    path: .
+  path: config/upstream
+- contents:
+  - imgpkgBundle:
+      image: projects.registry.vmware.com/buildservice/kpack/bundle@sha256:c521ab952b8b8dcfc3c305b089b0be2b422b62d7101a9f6f741eba582bdeffc4
+    path: .
+  path: .imgpkg
+kind: LockConfig

@@ -1,0 +1,42 @@
+apiVersion: imgpkg.carvel.dev/v1alpha1
+kind: ImagesLock
+images:
+- image: projects.registry.vmware.com/buildservice/kpack/controller@sha256:a58fdd8c6309bd3a068a5603791d842d2dcbd2aa94364ee3af426ec1cf70bade
+  annotations:
+    kbld.carvel.dev/id: gcr.io/cf-build-service-public/kpack/controller@sha256:a58fdd8c6309bd3a068a5603791d842d2dcbd2aa94364ee3af426ec1cf70bade
+- image: projects.registry.vmware.com/buildservice/kpack/rebase@sha256:25a502b2a752f8a9c32fa71d78bb589a19bc90d72a59af24bd162ae398624ef5
+  annotations:
+    kbld.carvel.dev/id: gcr.io/cf-build-service-public/kpack/rebase@sha256:25a502b2a752f8a9c32fa71d78bb589a19bc90d72a59af24bd162ae398624ef5
+- image: projects.registry.vmware.com/buildservice/kpack/rebase@sha256:25a502b2a752f8a9c32fa71d78bb589a19bc90d72a59af24bd162ae398624ef5
+  annotations:
+    kbld.carvel.dev/id: rebase
+- image: projects.registry.vmware.com/buildservice/kpack/completion@sha256:27bbfb2c53dd6e922c613749b172a08641cdc23bcb6916792221497743cf5fc6
+  annotations:
+    kbld.carvel.dev/id: gcr.io/cf-build-service-public/kpack/completion@sha256:27bbfb2c53dd6e922c613749b172a08641cdc23bcb6916792221497743cf5fc6
+- image: projects.registry.vmware.com/buildservice/kpack/completion@sha256:27bbfb2c53dd6e922c613749b172a08641cdc23bcb6916792221497743cf5fc6
+  annotations:
+    kbld.carvel.dev/id: completion
+- image: projects.registry.vmware.com/buildservice/kpack/completion-windows@sha256:ba0f8da86e8f2f0fb6563ced284e5cf0df9a82523f854b8eede213d4ce72230b
+  annotations:
+    kbld.carvel.dev/id: gcr.io/cf-build-service-public/kpack/completion-windows@sha256:ba0f8da86e8f2f0fb6563ced284e5cf0df9a82523f854b8eede213d4ce72230b
+- image: projects.registry.vmware.com/buildservice/kpack/completion-windows@sha256:ba0f8da86e8f2f0fb6563ced284e5cf0df9a82523f854b8eede213d4ce72230b
+  annotations:
+    kbld.carvel.dev/id: completion-windows
+- image: projects.registry.vmware.com/buildservice/kpack/lifecycle@sha256:2b041ebbb343c9ceb4b0f4237eab69785fbeffb3f98693a190c60b6ee1cedb1c
+  annotations:
+    kbld.carvel.dev/id: gcr.io/cf-build-service-public/kpack/lifecycle@sha256:2b041ebbb343c9ceb4b0f4237eab69785fbeffb3f98693a190c60b6ee1cedb1c
+- image: projects.registry.vmware.com/buildservice/kpack/webhook@sha256:9b62ad735b7df4577e3e8b06e5193d34434b11bffc5baf96ac7a9707971bb4e1
+  annotations:
+    kbld.carvel.dev/id: gcr.io/cf-build-service-public/kpack/webhook@sha256:9b62ad735b7df4577e3e8b06e5193d34434b11bffc5baf96ac7a9707971bb4e1
+- image: projects.registry.vmware.com/buildservice/kpack/build-init@sha256:eaf850422e450154d9cfff21f58703fdc80fe710547738beb51f8f8b77030edd
+  annotations:
+    kbld.carvel.dev/id: gcr.io/cf-build-service-public/kpack/build-init@sha256:eaf850422e450154d9cfff21f58703fdc80fe710547738beb51f8f8b77030edd
+- image: projects.registry.vmware.com/buildservice/kpack/build-init@sha256:eaf850422e450154d9cfff21f58703fdc80fe710547738beb51f8f8b77030edd
+  annotations:
+    kbld.carvel.dev/id: build-init
+- image: projects.registry.vmware.com/buildservice/kpack/build-init-windows@sha256:4cbe77857629898b8b46c70ca993b07c9e84336aada5ff4911271eb370f11f78
+  annotations:
+    kbld.carvel.dev/id: gcr.io/cf-build-service-public/kpack/build-init-windows@sha256:4cbe77857629898b8b46c70ca993b07c9e84336aada5ff4911271eb370f11f78
+- image: projects.registry.vmware.com/buildservice/kpack/build-init-windows@sha256:4cbe77857629898b8b46c70ca993b07c9e84336aada5ff4911271eb370f11f78
+  annotations:
+    kbld.carvel.dev/id: build-init-windows

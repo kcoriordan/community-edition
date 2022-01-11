@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kpack-version
+  namespace: kpack
+data:
+  version: 0.5.0

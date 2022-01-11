@@ -1,0 +1,18 @@
+apiVersion: data.packaging.carvel.dev/v1alpha1
+kind: PackageMetadata
+metadata:
+  name: kpack.community.tanzu.vmware.com
+spec:
+  displayName: "kpack"
+  longDescription: "kpack utilizes unprivileged kubernetes primitives to provide builds of OCI images as a platform implementation of Cloud Native Buildpacks (CNB)."
+  shortDescription: "kpack turns application source code into OCI container images"
+  providerName: VMware
+  maintainers:
+    - name: "Matthew McNew"
+    - name: "Tom Kennedy"
+    - name: "Tyler Phelan"
+    - name: "Kenneth DuMez"
+    - name: "Matt Gibson"
+    - name: "Viraj Patel"
+  categories:
+    - ""
