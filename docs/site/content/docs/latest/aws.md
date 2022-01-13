@@ -9,15 +9,21 @@ To enable Tanzu Community Edition VMs to launch on Amazon EC2, you must configur
 * [ ] Ensure the Tanzu Community Edition is installed locally on the bootstrap machine. See [Install Tanzu Community Edition](cli-installation.md).
 * [ ] Install [`jq`]( https://stedolan.github.io/jq/download/) locally on the bootstrap machine. The AWS CLI uses `jq` to process JSON when creating SSH key pairs.
 * [ ] Install the [AWS CLI]( https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html)
-* [ ] Ensure you have an active AWS account.
+* [ ] Ensure you have an active AWS account with an access key and access key secret for your active AWS account. For more information, see
+   [AWS Account and Access Keys](https://docs.aws.amazon.com/powershell/latest/userguide/pstools-appendix-sign-up.html) in the AWS documentation.
 * [ ] Review the reference information for your AWS account here: [Reference information for AWS Account](ref-aws.md).
 
 ## Procedure
 
-To configure your AWS account credentials and SSH key pair, perform the following steps:
+To enable Tanzu Community Edition to create and manage VMs on Amazon EC2, it must have an AWS account along with:
 
-1. Create an access key and access key secret for your active AWS account. For more information, see
-   [AWS Account and Access Keys](https://docs.aws.amazon.com/powershell/latest/userguide/pstools-appendix-sign-up.html) in the AWS documentation.
+- Credentials for the AWS account
+- An SSH key pair registered with the account for every AWS region in which you plan to deploy management clusters
+
+You must set your account credentials to create an SSH key pair for the region where you plan to deploy clusters.
+
+You have several options for configuring the AWS account credentials used to access EC2. The Credential Profiles option is the preferred option, managed with the aws configure command. These profiles save to a local shared configuration file, typically in `~/.aws/config`.
+
 
 1. Configure AWS credentials using one of the following methods:
 
