@@ -41,6 +41,12 @@ const (
 	ControlPlaneNodeCount     = "ControlPlaneNodeCount"
 	WorkerNodeCount           = "WorkerNodeCount"
 	Profiles                  = "Profiles"
+	LogFile                   = "LogFile"
+	defaultName               = "default-name"
+
+	ProviderKind     = "kind"
+	ProviderMinikube = "minikube"
+	ProviderNone     = "none"
 )
 
 var defaultConfigValues = map[string]interface{}{
@@ -53,8 +59,25 @@ var defaultConfigValues = map[string]interface{}{
 	WorkerNodeCount:       "0",
 }
 
+// Used to generate the empty, default config
+var emptyConfig = map[string]interface{}{
+	ClusterConfigFile:      "",
+	ClusterName:            "",
+	Tty:                    "",
+	TKRLocation:            "",
+	Provider:               "",
+	Cni:                    "",
+	PodCIDR:                "",
+	ServiceCIDR:            "",
+	ControlPlaneNodeCount:  "",
+	WorkerNodeCount:        "",
+	AdditionalPackageRepos: []string{},
+}
+
 // PortMap is the mapping between a host port and a container port.
 type PortMap struct {
+	// ListenAddress is the listening address to attach on the host machine
+	ListenAddress string `yaml:"ListenAddress,omitempty"`
 	// HostPort is the port on the host machine.
 	HostPort int `yaml:"HostPort,omitempty"`
 	// ContainerPort is the port on the container to map to.
@@ -115,6 +138,9 @@ type UnmanagedClusterConfig struct {
 	WorkerNodeCount string `yaml:"WorkerNodeCount"`
 	// Profiles is a set of profiles to install, including the package name, (optional) version, (optional) config
 	Profiles []Profile `yaml:"Profiles"`
+	// LogFile is the log file to send provider bootstrapping logs to
+	// should be a fully qualified path
+	LogFile string `yaml:"LogFile"`
 }
 
 // KubeConfigPath gets the full path to the KubeConfig for this unmanaged cluster.
@@ -220,6 +246,34 @@ func InitializeConfiguration(commandArgs map[string]interface{}) (*UnmanagedClus
 	config.ExistingClusterKubeconfig = sanatizeKubeconfigPath(config.ExistingClusterKubeconfig)
 
 	return config, nil
+}
+
+func GenerateDefaultConfig() *UnmanagedClusterConfig {
+	config := &UnmanagedClusterConfig{}
+
+	// Loop through and look up each field
+	// Because emptyConfig is used, should generate the default values
+	element := reflect.ValueOf(config).Elem()
+	for i := 0; i < element.NumField(); i++ {
+		fStructField := element.Type().Field(i)
+		f := element.Field(i)
+		fInt := f.Interface()
+
+		switch fInt.(type) {
+		case string:
+			setStringValue(emptyConfig, &element, &fStructField)
+		case []string:
+			setStringSliceValue(emptyConfig, &element, &fStructField)
+		case []Profile:
+			setProfileSliceValue(emptyConfig, &element, &fStructField)
+		default:
+		}
+		// skip fields that are not supported
+	}
+
+	config.ClusterName = defaultName
+
+	return config
 }
 
 // setStringValue takes an arbitrary map of string / interfaces, a reflect.Value, and the struct field to be filled.
@@ -414,18 +468,42 @@ func ParsePortMap(portMapping string) (PortMap, error) {
 
 	// Now see if we have just container, or container:host
 	parts = strings.Split(parts[0], ":")
-	p, err := strconv.Atoi(parts[0])
-	if err != nil {
-		return result, fmt.Errorf("failed to parse port mapping, invalid port provided: %q", parts[0])
-	}
-	result.ContainerPort = p
 
-	if len(parts) == 2 { //nolint:gomnd
-		p, err := strconv.Atoi(parts[1])
+	switch len(parts) {
+	case 3:
+		result.ListenAddress = parts[0]
+
+		containerPort, err := strconv.Atoi(parts[1])
 		if err != nil {
-			return result, fmt.Errorf("failed to parse port mapping, invalid port provided: %q", parts[1])
+			return result, fmt.Errorf("failed to parse port mapping, detected format listenAddress:port:port, invalid container port provided: %q", parts[1])
 		}
-		result.HostPort = p
+		result.ContainerPort = containerPort
+
+		hostPort, err := strconv.Atoi(parts[2])
+		if err != nil {
+			return result, fmt.Errorf("failed to parse port mapping, detected format listenAddress:port:port, invalid host port provided: %q", parts[2])
+		}
+		result.HostPort = hostPort
+	case 2:
+		containerPort, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return result, fmt.Errorf("failed to parse port mapping, detected format port:port, invalid container port provided: %q", parts[0])
+		}
+		result.ContainerPort = containerPort
+
+		hostPort, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return result, fmt.Errorf("failed to parse port mapping, detected format port:port, invalid host port provided: %q", parts[1])
+		}
+		result.HostPort = hostPort
+	case 1:
+		p, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return result, fmt.Errorf("failed to parse port mapping, detected format port:port, invalid container port provided: %q", parts[0])
+		}
+		result.ContainerPort = p
+	default:
+		return result, fmt.Errorf("failed to parse port mapping, invalid port mapping provided, expected format port, port:port, or listenAddress:port:port. Actual mapping provided: %v", parts)
 	}
 
 	return result, nil

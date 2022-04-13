@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -58,6 +59,7 @@ const cniNoneName = "none"
 type Cluster struct {
 	Name     string
 	Provider string
+	Status   string
 }
 
 // UnmanagedCluster contains information about an unmanaged Tanzu cluster.
@@ -88,6 +90,13 @@ type Manager interface {
 	// Delete takes a cluster name and removes the cluster from the underlying cluster provider. If it is unable
 	// to communicate with the underlying cluster provider, it returns an error.
 	Delete(name string) error
+	// Stop takes a cluster name and attempts to stop a running cluster. If it is unable
+	// to communicate with the underlying cluster provider, it returns an error.
+	Stop(name string) error
+	// Start takes a cluster name and attempts to start a stopped cluster. If
+	// there are issues starting the cluster or communitcating with the
+	// underlying provider, an error is returned.
+	Start(name string) error
 }
 
 // New returns a TanzuMgr for interacting with unmanaged clusters. It is implemented by TanzuUnmanaged.
@@ -106,7 +115,12 @@ func validateConfiguration(scConfig *config.UnmanagedClusterConfig) error {
 	if scConfig.Provider == "" {
 		// Should have been validated earlier, but not an error. We can just
 		// default it to kind.
-		scConfig.Provider = cluster.KindClusterManagerProvider
+		scConfig.Provider = config.ProviderKind
+	}
+
+	// if an existing kubeconfig (cluster) was specified. The provider should be set to noop
+	if scConfig.ExistingClusterKubeconfig != "" {
+		scConfig.Provider = config.ProviderNone
 	}
 
 	return nil
@@ -133,13 +147,16 @@ func (t *UnmanagedCluster) Deploy(scConfig *config.UnmanagedClusterConfig) (int,
 	}
 
 	// Configure the logger to capture all bootstrap activity
-	bootstrapLogsFp := filepath.Join(t.clusterDirectory, "bootstrap.log")
-	log.AddLogFile(bootstrapLogsFp)
+	// Use a default log file if config option was not provided by user
+	if scConfig.LogFile == "" {
+		scConfig.LogFile = filepath.Join(t.clusterDirectory, "bootstrap.log")
+	}
+	log.AddLogFile(scConfig.LogFile)
 	log.Event(logger.FolderEmoji, "Created cluster directory")
 
 	// Log a warning if the user has given a ProviderConfiguration
 	if len(scConfig.ProviderConfiguration) != 0 {
-		log.Style(outputIndent, color.FgYellow).ReplaceLinef("Reading ProviderConfiguration from config file. All other provider specific configs may be ignored.")
+		log.Style(outputIndent, color.FgYellow).ReplaceLinef("Reading ProviderConfiguration from config file. Some provider specific flags and configs may be ignored.")
 	}
 
 	// 2. Download and Read the compatible TKr
@@ -179,7 +196,7 @@ func (t *UnmanagedCluster) Deploy(scConfig *config.UnmanagedClusterConfig) (int,
 		return ErrRenderingConfig, err
 	}
 	log.Style(outputIndent, color.Faint).Infof("Rendered Config: %s\n", configFp)
-	log.Style(outputIndent, color.Faint).Infof("Bootstrap Logs: %s\n", bootstrapLogsFp)
+	log.Style(outputIndent, color.Faint).Infof("Bootstrap Logs: %s\n", scConfig.LogFile)
 
 	log.Event(logger.WrenchEmoji, "Processing Tanzu Kubernetes Release")
 	t.bom, err = parseTKRBom(bomFileName)
@@ -201,8 +218,11 @@ func (t *UnmanagedCluster) Deploy(scConfig *config.UnmanagedClusterConfig) (int,
 	// 3. Resolve all required images
 	// base image
 	log.Event(logger.PictureEmoji, "Selected base image")
-	log.Style(outputIndent, color.Faint).Infof("%s\n", t.bom.GetTKRNodeImage())
-	scConfig.NodeImage = t.bom.GetTKRNodeImage()
+	scConfig.NodeImage = t.bom.GetTKRNodeImage(scConfig.Provider)
+	if scConfig.NodeImage == "" {
+		return ErrTkrBomParsing, fmt.Errorf("failed parsing TKR BOM. Could not get base node image for provider %s", scConfig.Provider)
+	}
+	log.Style(outputIndent, color.Faint).Infof("%s\n", scConfig.NodeImage)
 
 	// core package repository
 	log.Event(logger.PackageEmoji, "Selected core package repository")
@@ -227,7 +247,7 @@ func (t *UnmanagedCluster) Deploy(scConfig *config.UnmanagedClusterConfig) (int,
 	// 4. Create the cluster
 	var clusterToUse *cluster.KubernetesCluster
 
-	if scConfig.ExistingClusterKubeconfig != "" {
+	if scConfig.Provider == config.ProviderNone {
 		log.Eventf(logger.RocketEmoji, "Using existing cluster\n")
 		clusterToUse, err = useExistingCluster(scConfig)
 		if err != nil {
@@ -409,8 +429,62 @@ func (t *UnmanagedCluster) Delete(name string) error {
 	var err error
 	t.clusterDirectory, err = resolveClusterDir(name)
 	if err != nil {
+		log.Style(outputIndent, color.FgYellow).Warnf("Warning - could not resolve cluster config directory.\n")
+		log.Style(outputIndent, color.FgYellow).Warnf("Cluster NOT deleted.\n")
+		log.Style(outputIndent, color.FgYellow).Warnf("Local config files NOT deleted.\n")
+		log.Style(outputIndent, color.FgYellow).Warnf("Be sure to manually delete cluster and local config files\n")
 		return err
 	}
+
+	configPath, err := resolveClusterConfig(name)
+	if err != nil {
+		log.Style(outputIndent, color.FgYellow).Warnf("Warning - could not resolve cluster config file. Error: %s\n", err.Error())
+		log.Style(outputIndent, color.FgYellow).Warnf("Cluster NOT deleted.\n")
+		log.Style(outputIndent, color.FgYellow).Warnf("Be sure to manually delete cluster\n")
+		deleteErr := os.RemoveAll(t.clusterDirectory)
+		if deleteErr != nil {
+			log.Style(outputIndent, color.FgRed).Errorf("Failed to remove config %s. Be sure to manually delete files\n", t.clusterDirectory)
+			return deleteErr
+		}
+
+		log.Style(outputIndent, color.Faint).Infof("Local config files directory deleted: %s\n", t.clusterDirectory)
+		return err
+	}
+
+	t.config, err = config.RenderFileToConfig(configPath)
+	if err != nil {
+		log.Style(outputIndent, color.FgYellow).Warnf("Warning - could not create configuration from local config file. Error: %s\n", err.Error())
+		log.Style(outputIndent, color.FgYellow).Warnf("Cluster NOT deleted.\n")
+		log.Style(outputIndent, color.FgYellow).Warnf("Be sure to manually delete cluster\n")
+		deleteErr := os.RemoveAll(t.clusterDirectory)
+		if deleteErr != nil {
+			log.Style(outputIndent, color.FgRed).Errorf("Failed to remove config %s. Be sure to manually delete files\n", t.clusterDirectory)
+			return deleteErr
+		}
+
+		log.Style(outputIndent, color.Faint).Infof("Local config files directory deleted: %s\n", t.clusterDirectory)
+		return err
+	}
+
+	cm := cluster.NewClusterManager(t.config)
+
+	err = cm.Delete(t.config)
+	if err != nil {
+		log.Style(outputIndent, color.FgYellow).Warnf("Warning - could not delete cluster through provider. Be sure to manually delete cluster. Error: %s\n", err.Error())
+	}
+
+	deleteErr := os.RemoveAll(t.clusterDirectory)
+	if deleteErr != nil {
+		log.Style(outputIndent, color.FgYellow).Warnf("Cluster deleted but failed to remove config %s. Be sure to manually delete files\n", t.clusterDirectory)
+		return deleteErr
+	}
+
+	log.Style(outputIndent, color.Faint).Infof("Local config files directory deleted: %s\n", t.clusterDirectory)
+	return err
+}
+
+// Stop tells an unmanaged cluster to no longer continue running.
+func (t *UnmanagedCluster) Stop(name string) error {
 	configPath, err := resolveClusterConfig(name)
 	if err != nil {
 		return err
@@ -422,20 +496,36 @@ func (t *UnmanagedCluster) Delete(name string) error {
 
 	cm := cluster.NewClusterManager(t.config)
 
-	err = cm.Delete(t.config)
+	err = cm.Stop(t.config)
 	if err != nil {
 		return err
-	}
-
-	err = os.RemoveAll(t.clusterDirectory)
-	if err != nil {
-		log.Warnf("Cluster deleted but failed to remove config %s. Be sure to manually delete.", t.clusterDirectory)
 	}
 
 	return nil
 }
 
-func getUnmanagedBomPath() (path string, err error) {
+// Start tells an unmanaged cluster to start a cluster that is not currently running.
+func (t *UnmanagedCluster) Start(name string) error {
+	configPath, err := resolveClusterConfig(name)
+	if err != nil {
+		return err
+	}
+	t.config, err = config.RenderFileToConfig(configPath)
+	if err != nil {
+		return err
+	}
+
+	cm := cluster.NewClusterManager(t.config)
+
+	err = cm.Start(t.config)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func getUnmanagedBomPath() (bomPath string, err error) {
 	tkgUnmanagedConfigDir, err := config.GetUnmanagedConfigPath()
 	if err != nil {
 		return "", err
@@ -444,7 +534,7 @@ func getUnmanagedBomPath() (path string, err error) {
 	return filepath.Join(tkgUnmanagedConfigDir, bomDir), nil
 }
 
-func getUnmanagedCompatibilityPath() (path string, err error) {
+func getUnmanagedCompatibilityPath() (compatPath string, err error) {
 	tkgUnmanagedConfigDir, err := config.GetUnmanagedConfigPath()
 	if err != nil {
 		return "", err
@@ -453,7 +543,7 @@ func getUnmanagedCompatibilityPath() (path string, err error) {
 	return filepath.Join(tkgUnmanagedConfigDir, compatibilityDir), nil
 }
 
-func buildFilesystemSafeBomName(bomFileName string) (path string) {
+func buildFilesystemSafeBomName(bomFileName string) string {
 	var sb strings.Builder
 	for _, char := range bomFileName {
 		if char == '/' || char == ':' {
@@ -570,7 +660,8 @@ func getTkrCompatibility() (*tkr.Compatibility, error) {
 func isTkrCompatible(c *tkr.Compatibility, tkrName string) bool {
 	// Inspect CLI version and get most recent compatible version of TKr
 	for _, cliVersion := range c.UnmanagedClusterPluginVersions {
-		if cliVersion.Version == plugin.Version {
+		// when the versions match exactly OR the version has a substring of the compatibility version (this supports "dev" compatibility versions)
+		if cliVersion.Version == plugin.Version || strings.Contains(plugin.Version, cliVersion.Version) {
 			for _, possibleTkr := range cliVersion.SupportedTkrVersions {
 				if possibleTkr.Path == tkrName {
 					return true
@@ -587,7 +678,8 @@ func isTkrCompatible(c *tkr.Compatibility, tkrName string) bool {
 func getLatestCompatibleTkr(c *tkr.Compatibility) (string, error) {
 	// Inspect CLI version and get most recent compatible version of TKr
 	for _, cliVersion := range c.UnmanagedClusterPluginVersions {
-		if cliVersion.Version == plugin.Version {
+		// when the versions match exactly OR the version has a substring of the compatibility version (this supports "dev" compatibility versions)
+		if cliVersion.Version == plugin.Version || strings.Contains(plugin.Version, cliVersion.Version) {
 			// We've found a compatible version
 			// Check it's filled to prevent a panic. We should never ship a compatibility file with an empty compatibility for a CLI version
 			if len(cliVersion.SupportedTkrVersions) == 0 || cliVersion.SupportedTkrVersions[0].Path == "" {
@@ -683,6 +775,10 @@ func getCompatibilityFile() (string, error) {
 }
 
 func getTkrBom(registry string) (string, error) {
+	if isLocalTkrBom(registry) {
+		return useLocalTkrBom(registry)
+	}
+
 	log.Style(outputIndent, color.Faint).Infof("%s\n", registry)
 	expectedBomName := buildFilesystemSafeBomName(registry)
 
@@ -753,8 +849,47 @@ func getTkrBom(registry string) (string, error) {
 	return expectedBomName, nil
 }
 
-func blockForImageDownload(b tkr.ImageReader, path, expectedName string) error {
-	f := filepath.Join(path, expectedName)
+func isLocalTkrBom(p string) bool {
+	_, err := os.Stat(path.Clean(p))
+	return !os.IsNotExist(err)
+}
+
+func useLocalTkrBom(p string) (string, error) {
+	log.Style(outputIndent, color.Faint).Infof("Reading and copying local file for TKr bom at %s\n", p)
+
+	cleanPath := path.Clean(p)
+
+	// Name the bom with the `local-` prefix so there are no clashes with real tkrs/boms
+	expectedBomName := buildFilesystemSafeBomName("local-" + cleanPath)
+
+	localTkrBom, err := os.Open(cleanPath)
+	if err != nil {
+		return "", fmt.Errorf("could not open downloaded tkr bom file: %s", err)
+	}
+	defer localTkrBom.Close()
+
+	bomPath, err := getUnmanagedBomPath()
+	if err != nil {
+		return "", fmt.Errorf("failed to get tanzu stanadlone bom path: %s", err)
+	}
+
+	newBomFile, err := os.Create(filepath.Join(bomPath, expectedBomName))
+	if err != nil {
+		return "", fmt.Errorf("could not create tanzu unmanaged bom tkr file: %s", err)
+	}
+	defer newBomFile.Close()
+
+	_, err = io.Copy(newBomFile, localTkrBom)
+	if err != nil {
+		return "", fmt.Errorf("could not copy file contents: %s", err)
+	}
+
+	log.Style(outputIndent, color.Faint).Infof("Copied TKr to %s\n", newBomFile.Name())
+	return expectedBomName, nil
+}
+
+func blockForImageDownload(b tkr.ImageReader, downloadpath, expectedName string) error {
+	f := filepath.Join(downloadpath, expectedName)
 
 	// start a go routine to animate the downloading logs while the imgpkg libraries get the bom image
 	ctx, cancel := context.WithCancel(context.Background())
@@ -813,7 +948,7 @@ func runClusterCreate(scConfig *config.UnmanagedClusterConfig) (*cluster.Kuberne
 
 	clusterManager := cluster.NewClusterManager(scConfig)
 
-	for _, message := range clusterManager.ProviderNotify() {
+	for _, message := range clusterManager.PreProviderNotify() {
 		log.Style(outputIndent, color.Faint).Info(message)
 	}
 
@@ -901,6 +1036,10 @@ func blockForClusterCreate(cm cluster.Manager, scConfig *config.UnmanagedCluster
 	// Once done, cancel the go routine animations and log final message
 	cancel()
 	log.Style(outputIndent, color.Faint).ReplaceLinef("Cluster created")
+
+	for _, l := range cm.PostProviderNotify() {
+		log.Style(outputIndent, color.FgYellow).Warnf("%s\n", l)
+	}
 
 	return kc, nil
 }

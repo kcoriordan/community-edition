@@ -57,7 +57,8 @@ TANZU_FRAMEWORK_REPO_BRANCH ?= $(FRAMEWORK_BUILD_VERSION)
 TANZU_FRAMEWORK_REPO_HASH ?=
 # TKG_DEFAULT_IMAGE_REPOSITORY override for using a different image repo
 ifndef TKG_DEFAULT_IMAGE_REPOSITORY
-TKG_DEFAULT_IMAGE_REPOSITORY ?= projects.registry.vmware.com/tkg
+# Production: TKG_DEFAULT_IMAGE_REPOSITORY ?= projects.registry.vmware.com/tkg
+TKG_DEFAULT_IMAGE_REPOSITORY ?= projects-stg.registry.vmware.com/tkg
 endif
 # TKG_DEFAULT_COMPATIBILITY_IMAGE_PATH override for using a different image path
 ifndef TKG_DEFAULT_COMPATIBILITY_IMAGE_PATH
@@ -124,24 +125,12 @@ OCI_REGISTRY := projects.registry.vmware.com/tce
 ##### IMAGE
 
 ##### LINTING TARGETS
-.PHONY: check check-serial check-parallel lint mdlint shellcheck yamllint misspell actionlint urllint imagelint
+.PHONY: check check-full lint mdlint shellcheck yamllint misspell actionlint urllint imagelint
 check:
-	@make_version=`make --version | grep -E "GNU Make [0-9].[0-9]+" | grep -E -o "[0-9].[0-9]+" | cut -d "." -f1`; \
-	if [ "$${make_version}" != "3" ]; then \
-		echo " "; \
-		echo "*********************************************************************************"; \
-		echo "Executing linters in parallel. Output is withheld until individual lint jobs complete."; \
-		echo "*********************************************************************************"; \
-		echo " "; \
-		$(MAKE) --jobs=$(NUMBER_OF_CORES) --output-sync=target lint mdlint shellcheck yamllint misspell actionlint urllint imagelint; \
-	else \
-		echo " "; \
-		echo "***************************************************"; \
-		echo "To speed up linting, update to the latest GNU Make."; \
-		echo "***************************************************"; \
-		echo " "; \
-		$(MAKE) lint mdlint shellcheck yamllint misspell actionlint urllint imagelint; \
-	fi;
+	go run hack/check/makerunner.go lint mdlint shellcheck yamllint misspell urllint
+
+check-full:
+	go run hack/check/makerunner.go lint mdlint shellcheck yamllint misspell urllint actionlint imagelint
 
 .PHONY: check-deps-minimum-build
 check-deps-minimum-build:

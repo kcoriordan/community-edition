@@ -67,7 +67,7 @@ Exit codes are provided to enhance the automation of bootstrapping and are defin
 // CreateCmd creates an unmanaged workload cluster.
 var CreateCmd = &cobra.Command{
 	Use:   "create <cluster name>",
-	Short: "Create an unmanaged Tanzu cluster",
+	Short: "Create an unmanaged cluster",
 	Long:  createDesc,
 	Run:   create,
 	Args:  cobra.MaximumNArgs(1),
@@ -79,12 +79,12 @@ func init() {
 	CreateCmd.Flags().StringVarP(&co.clusterConfigFile, "config", "f", "", "A config file describing how to create the Tanzu environment")
 	CreateCmd.Flags().StringVarP(&co.existingClusterKubeconfig, "existing-cluster-kubeconfig", "e", "", "Use an existing kubeconfig to tanzu-ify a cluster")
 	CreateCmd.Flags().StringVar(&co.infrastructureProvider, "provider", "", "The infrastructure provider for cluster creation; default is kind")
-	CreateCmd.Flags().StringVarP(&co.tkrLocation, "tkr", "t", "", "The URL to the image containing a Tanzu Kubernetes release")
+	CreateCmd.Flags().StringVarP(&co.tkrLocation, "tkr", "t", "", "The URL to the image or path to local file containing a Tanzu Kubernetes release")
 	CreateCmd.Flags().StringSliceVar(&co.additionalRepo, "additional-repo", []string{}, "Addresses for additional package repositories to install")
 	CreateCmd.Flags().StringVarP(&co.cni, "cni", "c", "", "The CNI to deploy; default is calico")
 	CreateCmd.Flags().StringVar(&co.podcidr, "pod-cidr", "", "The CIDR for Pod IP allocation; default is 10.244.0.0/16")
 	CreateCmd.Flags().StringVar(&co.servicecidr, "service-cidr", "", "The CIDR for Service IP allocation; default is 10.96.0.0/16")
-	CreateCmd.Flags().StringSliceVarP(&co.portMapping, "port-map", "p", []string{}, "Ports to map between container node and the host (format: '80:80/tcp' or just '80')")
+	CreateCmd.Flags().StringSliceVarP(&co.portMapping, "port-map", "p", []string{}, "Ports to map between container node and the host (format: '127.0.0.1:80:80/tcp', '80:80/tcp', '80:80', or just '80')")
 	CreateCmd.Flags().Bool("tty-disable", false, "Disable log stylization and emojis")
 	CreateCmd.Flags().BoolVar(&co.skipPreflightChecks, "skip-preflight", false, "Skip the preflight checks; default is false")
 	CreateCmd.Flags().StringVar(&co.numContPlanes, "control-plane-node-count", "", "The number of control plane nodes to deploy; default is 1")
@@ -121,6 +121,13 @@ func create(cmd *cobra.Command, args []string) {
 		os.Exit(tanzu.ErrRenderingConfig)
 	}
 
+	// Get the log file from the global parent flag
+	logFile, err := cmd.Parent().PersistentFlags().GetString("log-file")
+	if err != nil {
+		log.Errorf("Failed to parse log file string. Error %v\n", err)
+		os.Exit(tanzu.InvalidConfig)
+	}
+
 	// Determine our configuration to use
 	configArgs := map[string]interface{}{
 		config.ClusterConfigFile:         co.clusterConfigFile,
@@ -135,6 +142,7 @@ func create(cmd *cobra.Command, args []string) {
 		config.WorkerNodeCount:           co.numWorkers,
 		config.AdditionalPackageRepos:    co.additionalRepo,
 		config.Profiles:                  profiles,
+		config.LogFile:                   logFile,
 	}
 	clusterConfig, err := config.InitializeConfiguration(configArgs)
 	if err != nil {

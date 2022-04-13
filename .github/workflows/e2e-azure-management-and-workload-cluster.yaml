@@ -44,7 +44,7 @@ jobs:
     runs-on: ${{ needs.setup-runner.outputs.ec2-instance-id }} # run the job on the newly created runner
     steps:
       - name: Set up Go 1.x
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: "1.17"
         id: go
@@ -81,7 +81,7 @@ jobs:
           make azure-management-and-workload-cluster-e2e-test
 
       - name: Collect tanzu diagnostics data
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         if: ${{ always() }}
         with:
           name: diagnostics-data

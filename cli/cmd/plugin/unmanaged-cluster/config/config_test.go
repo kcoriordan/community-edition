@@ -12,20 +12,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var emptyConfig = map[string]interface{}{
-	ClusterConfigFile:      "",
-	ClusterName:            "",
-	Tty:                    "",
-	TKRLocation:            "",
-	Provider:               "",
-	Cni:                    "",
-	PodCIDR:                "",
-	ServiceCIDR:            "",
-	ControlPlaneNodeCount:  "",
-	WorkerNodeCount:        "",
-	AdditionalPackageRepos: []string{},
-}
-
 func TestInitializeConfigurationNoName(t *testing.T) {
 	_, err := InitializeConfiguration(emptyConfig)
 	if err == nil {
@@ -236,6 +222,41 @@ func TestInitializeConfigurationFromConfigFile(t *testing.T) {
 	}
 }
 
+func TestGenerateDefaultConfig(t *testing.T) {
+	config := GenerateDefaultConfig()
+	if config.ClusterName != "default-config" {
+		t.Errorf("expected ClusterName to be 'test', was actually: %q", config.ClusterName)
+	}
+
+	if config.Cni != defaultConfigValues[Cni] {
+		t.Errorf("expected default Cni value, was: %q", config.Cni)
+	}
+
+	if len(config.AdditionalPackageRepos) != 0 {
+		t.Errorf("expected no AdditionalPackageRepos, was: %q", config.AdditionalPackageRepos)
+	}
+
+	if config.Provider != defaultConfigValues[Provider] {
+		t.Errorf("expected default Provider, was: %q", config.Provider)
+	}
+
+	if config.PodCidr != defaultConfigValues[PodCIDR] {
+		t.Errorf("expected default PodCidr, was: %q", config.PodCidr)
+	}
+
+	if config.ServiceCidr != defaultConfigValues[ServiceCIDR] {
+		t.Errorf("expected default ServiceCidr, was: %q", config.ServiceCidr)
+	}
+
+	if config.ControlPlaneNodeCount != defaultConfigValues[ControlPlaneNodeCount] {
+		t.Errorf("expected default ControlPlaneNodeCount, was: %q", config.ControlPlaneNodeCount)
+	}
+
+	if config.WorkerNodeCount != defaultConfigValues[WorkerNodeCount] {
+		t.Errorf("expected default WorkerNodeCount, was: %q", config.ControlPlaneNodeCount)
+	}
+}
+
 func TestFieldNameToEnvName(t *testing.T) {
 	result := fieldNameToEnvName("SomeCamelCaseVar")
 	if result != "TANZU_SOME_CAMEL_CASE_VAR" {
@@ -256,10 +277,37 @@ func TestSanatizeKubeconfigPath(t *testing.T) {
 	}
 }
 
+func TestParsePortMapFullStringWithListenAddr(t *testing.T) {
+	portMap, err := ParsePortMap("127.0.0.1:80:8080/tcp")
+	if err != nil {
+		t.Error("Parsing should pass")
+	}
+
+	if portMap.ListenAddress != "127.0.0.1" {
+		t.Errorf("Listen address should be 127.0.0.1, was %s", portMap.ListenAddress)
+	}
+
+	if portMap.ContainerPort != 80 {
+		t.Errorf("Container port should be 80, was %d", portMap.ContainerPort)
+	}
+
+	if portMap.HostPort != 8080 {
+		t.Errorf("Host port should be 8080, was %d", portMap.HostPort)
+	}
+
+	if portMap.Protocol != "tcp" {
+		t.Errorf("Protocol should be tcp, was %s", portMap.Protocol)
+	}
+}
+
 func TestParsePortMapFullString(t *testing.T) {
 	portMap, err := ParsePortMap("80:8080/tcp")
 	if err != nil {
 		t.Error("Parsing should pass")
+	}
+
+	if portMap.ListenAddress != "" {
+		t.Errorf("Listen address should be empty, was %s", portMap.ListenAddress)
 	}
 
 	if portMap.ContainerPort != 80 {
@@ -279,6 +327,10 @@ func TestParsePortMapContainerPort(t *testing.T) {
 	portMap, err := ParsePortMap("80")
 	if err != nil {
 		t.Error("Parsing should pass")
+	}
+
+	if portMap.ListenAddress != "" {
+		t.Errorf("Listen address should be empty, was %s", portMap.ListenAddress)
 	}
 
 	if portMap.ContainerPort != 80 {
