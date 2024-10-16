@@ -12,7 +12,7 @@ replace (
 )
 
 require (
-	github.com/spf13/cobra v1.4.0
+	github.com/spf13/cobra v1.8.1
 	github.com/vmware-tanzu/community-edition v0.9.1
 )
 
@@ -29,7 +29,7 @@ require (
 	github.com/vmware-tanzu/carvel-vendir v0.27.0
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
 	gopkg.in/yaml.v2 v2.4.0
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.24.0
 	k8s.io/apiextensions-apiserver v0.24.0
 	k8s.io/apimachinery v0.24.0
@@ -64,7 +64,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/go-version v1.4.0 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
-	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/k14s/semver/v4 v4.0.1-0.20210701191048-266d47ac6115 // indirect
